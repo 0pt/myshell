@@ -40,7 +40,7 @@ int div_cnt(char *s, char del){
 void show_cmdrec(cmdrec cmdar){
 	printf("# show_cmdrec()\n");
 	printf("# pid = %d, ifd = %d, ofd = %d\n",cmdar.pid,cmdar.ifd,cmdar.ofd);
-	printf("# ifn = %s\n# ofn = %s\n",cmdar.ifn,cmdar.ofn);
+	printf("# ifn = \"%s\"\n# ofn = \"%s\"\n",cmdar.ifn,cmdar.ofn);
 }
 
 void init_dar(char **dar, int n){
@@ -132,9 +132,10 @@ cmdrec analyze_buf(cmdrec cmdar, char *cmd){
 	printf("# analyze_odr()\n");
 	int cmdlen = strlen(cmd);
 	// printf("%s\n", cmd);
+
 	cmdar.ifn = (char *)malloc(sizeof(char)*cmdlen);
 	int m_in = pickrdirIN(cmdar.ifn, cmd);
-	printf("# cmdar.ifn = %s\n# cmd = %s\n",cmdar.ifn, cmd);
+	printf("# cmdar.ifn = \"%s\"\n# cmd = \"%s\"\n",cmdar.ifn, cmd);
 	if(cmdar.ifn && cmdar.ifn[0]){
 		cmdar.ifd = open(cmdar.ifn, O_WRONLY|O_CREAT|O_TRUNC, 0644);
  	}
@@ -142,7 +143,7 @@ cmdrec analyze_buf(cmdrec cmdar, char *cmd){
 
 	cmdar.ofn = (char *)malloc(sizeof(char)*cmdlen);
 	int out_m = pickrdirOUT(cmdar.ofn, cmd);
-	printf("# cmdar.ofn = %s\n# cmd = %s\n",cmdar.ofn, cmd);
+	printf("# cmdar.ofn = \"%s\"\n# cmd = \"%s\"\n",cmdar.ofn, cmd);
 	if(cmdar.ofn && cmdar.ofn[0]){
 		cmdar.ofd = open(cmdar.ofn, O_WRONLY|O_CREAT|O_TRUNC, 0644);
 	}
