@@ -37,6 +37,12 @@ int div_cnt(char *s, char del){
 	return cnt;
 }
 
+void show_cmdrec(cmdrec cmdar){
+	printf("# show_cmdrec()\n");
+	printf("# pid = %d, ifd = %d, ofd = %d\n",cmdar.pid,cmdar.ifd,cmdar.ofd);
+	printf("# ifn = %s\n# ofn = %s\n",cmdar.ifn,cmdar.ofn);
+}
+
 void init_dar(char **dar, int n){
 	dar = (char **)malloc(sizeof(char *)*n);
 	for(int i=0; i<n; i++){
@@ -51,17 +57,16 @@ int check_file(char c){
 		return 1;
 	}else if(c >= '0' && c<= '9'){
 		return 1;
-	}else if(c >= '.' || c <= '-'){
+	}else if(c == '.' || c == '-'){
 		return 1;
 	}
 	return 0;
 }
 
 // slide hint03 p.7 ; pick redirect area
-int pickrdirIN(char *dst, char *src){
-	printf("pickrdirIN()\n");
-	int m=0; char *p = src, *q = dst;
-	char *c;
+int pickrdirIn(char *dst, char *src){
+	printf("# pickrdirIN()\n");
+	int m=0; char *p = src, *q = dst, *c;
 	// printf("%c\n",*p);
 	while(*p){
 		if(*p == '<'){
@@ -87,34 +92,35 @@ int pickrdirIN(char *dst, char *src){
 	return m;
 }
 
-// int pickrdirOUT(char *dst, char *src){
-// 	char *p, *q; int m=0;
-// 	p = src;
-// 	q = dst;
-// 	*q = '\0';
-// 	while(*p){
-// 		if(*p == '>'){
-// 			m = RDIR_OUT;
-// 			p++;
-// 			if(*p == '>'){
-// 				m = RDIR_APPEND;
-// 				p++;
-// 			}
-// 			while(*p && (*p == ' ' || *p == '\t')){
-// 				p++;
-// 			}
-// 			while(*p && check_file(*p)){
-// 				*q++ = *p;
-// 				*p = ' ';
-// 				p++;
-// 			}
-// 			*q = 0;
-// 			break;
-// 		}
-// 		p++;
-// 	}
-// 	return m;
-// }
+int pickrdirOut(char *dst, char *src){
+	printf("# pickrdirOUT()\n");
+	char *p, *q, *c; int m=0;
+	p = src;
+	q = dst;
+	*q = '\0';
+	while(*p){
+		if(*p == '>'){
+			c = p;
+			m = RDIR_OUT;
+			p++;
+			if(*p == '>'){
+				m = RDIR_APPEND;
+				p++;
+			}
+			while(*p && (*p == ' ' || *p == '\t')){
+				p++;
+			}
+			while(*p && check_file(*p)){
+				*q++ = *p++;
+			}
+			while(c < p) *c++ = ' ';
+			*q = '\0';
+			break;
+		}
+		p++;
+	}
+	return m;
+}
 
 cmdrec init_cmdrec(cmdrec cmd){
 	cmd.ifd = -1;
@@ -123,21 +129,25 @@ cmdrec init_cmdrec(cmdrec cmd){
 }
 
 cmdrec analyze_buf(cmdrec cmdar, char *cmd){
-	printf("analyze_odr()\n");
+	printf("# analyze_odr()\n");
 	int cmdlen = strlen(cmd);
-	printf("%s\n", cmd);
+	// printf("%s\n", cmd);
+
 	cmdar.ifn = (char *)malloc(sizeof(char)*cmdlen);
-	int m_in = pickrdirIN(cmdar.ifn, cmd);
-	printf("cmdar.ifn = %s\ncmd = %s\n",cmdar.ifn, cmd);
-	cmdar.
+	int m_in = pickrdirIn(cmdar.ifn, cmd);
+	printf("# cmdar.ifn = \"%s\", cmd = \"%s\"\n",cmdar.ifn, cmd);
 	if(cmdar.ifn && cmdar.ifn[0]){
 		cmdar.ifd = open(cmdar.ifn, O_WRONLY|O_CREAT|O_TRUNC, 0644);
  	}
-	// int out_m = pickrdirOUT(cmdar->ofn, cmd);
-	// if(cmdar.ofn && cmdar.ofn[0]){
-	// 	cmdar.ofd = open(cmdar.ofn, \
-	// 		O_WRONLY|O_CREAT|O_TRUNC, 0644);
-	// }
+	printf("# cmdar.ifd = %d\n",cmdar.ifd);
+	
+	cmdar.ofn = (char *)malloc(sizeof(char)*cmdlen);
+	int out_m = pickrdirOut(cmdar.ofn, cmd);
+	printf("# cmdar.ofn = \"%s\", cmd = \"%s\"\n",cmdar.ofn, cmd);
+	if(cmdar.ofn && cmdar.ofn[0]){
+		cmdar.ofd = open(cmdar.ofn, O_WRONLY|O_CREAT|O_TRUNC, 0644);
+	}
+	printf("# cmdar.ofd = %d\n",cmdar.ofd);
 	return cmdar;
 }
 
@@ -151,8 +161,8 @@ int main(){
 		buf[strlen(buf)-1] = '\0';
 		cmdrec cmdar;
 		cmdar = init_cmdrec(cmdar);
-		// printf("%d %d\n",cmdar.ifd, cmdar.ofd);
-		analyze_buf(cmdar, buf);
+		cmdar = analyze_buf(cmdar, buf);
+		// show_cmdrec(cmdar);
 		pid = fork();
 		
 		// pid == 0 is child proc
