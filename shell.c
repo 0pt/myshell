@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <fcntl.h>
+#include "split.h"
 
 #define RDIR_IN		(10)
 #define RDIR_HERE	(11)
@@ -41,6 +42,9 @@ void show_cmdrec(cmdrec cmdar){
 	printf("# show_cmdrec()\n");
 	printf("# pid = %d, ifd = %d, ofd = %d\n",cmdar.pid,cmdar.ifd,cmdar.ofd);
 	printf("# ifn = %s\n# ofn = %s\n",cmdar.ifn,cmdar.ofn);
+	for(int i=0; i<10; i++){
+		printf("# %d : %s\n",i ,cmdar.cmdarg[i]);
+	}
 }
 
 void init_dar(char **dar, int n){
@@ -128,13 +132,12 @@ cmdrec init_cmdrec(cmdrec cmd){
 	return cmd;
 }
 
-cmdrec analyze_buf(cmdrec cmdar, char *cmd){
+cmdrec analyze_buf(cmdrec cmdar, char *cmd, int *m_in, int *m_out){
 	printf("# analyze_odr()\n");
 	int cmdlen = strlen(cmd);
 	// printf("%s\n", cmd);
-
 	cmdar.ifn = (char *)malloc(sizeof(char)*cmdlen);
-	int m_in = pickrdirIn(cmdar.ifn, cmd);
+	*m_in = pickrdirIn(cmdar.ifn, cmd);
 	printf("# cmdar.ifn = \"%s\", cmd = \"%s\"\n",cmdar.ifn, cmd);
 	if(cmdar.ifn && cmdar.ifn[0]){
 		cmdar.ifd = open(cmdar.ifn, O_WRONLY|O_CREAT|O_TRUNC, 0644);
@@ -142,7 +145,7 @@ cmdrec analyze_buf(cmdrec cmdar, char *cmd){
 	printf("# cmdar.ifd = %d\n",cmdar.ifd);
 	
 	cmdar.ofn = (char *)malloc(sizeof(char)*cmdlen);
-	int out_m = pickrdirOut(cmdar.ofn, cmd);
+	*m_out = pickrdirOut(cmdar.ofn, cmd);
 	printf("# cmdar.ofn = \"%s\", cmd = \"%s\"\n",cmdar.ofn, cmd);
 	if(cmdar.ofn && cmdar.ofn[0]){
 		cmdar.ofd = open(cmdar.ofn, O_WRONLY|O_CREAT|O_TRUNC, 0644);
@@ -161,14 +164,32 @@ int main(){
 		buf[strlen(buf)-1] = '\0';
 		cmdrec cmdar;
 		cmdar = init_cmdrec(cmdar);
-		cmdar = analyze_buf(cmdar, buf);
-		// show_cmdrec(cmdar);
+		int m_in = 0, m_out = 0;
+		cmdar = analyze_buf(cmdar, buf, &m_in, &m_out);
+		printf("# m_in, m_out = %d, %d\n",m_in, m_out);
 		pid = fork();
-		
+		cmdar.pid = pid;
 		// pid == 0 is child proc
-		if(pid == 0){
-			execlp(buf, buf, (char *)NULL);
-			perror("execlp");
+		if(cmdar.pid == 0){
+			char **tmp = (char **)malloc(sizeof(char)*11);
+			for(int i=0; i<10; i++){
+				*(tmp+i) = (char *)malloc(sizeof(char)*BUFSIZ);
+			}
+			split(10, BUFSIZ, tmp, buf, ' ');
+			show(tmp);
+			for(int k=0; k<10; k++){
+				if(!*(tmp+k)){
+					break;
+				}
+				cmdar.cmdarg[k] = *(tmp+k);
+				
+				// because my split() cause bag, it just replace NULL
+				if(cmdar.cmdarg[k][0] == '\0') cmdar.cmdarg[k] = NULL;
+			}
+			show_cmdrec(cmdar);
+			// execlp(buf, buf, (char *)NULL);
+			execvp(cmdar.cmdarg[0], cmdar.cmdarg);
+			perror("execvp");
 			exit(1);
 		}
 		while(wait(&status) != pid){
