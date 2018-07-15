@@ -67,8 +67,8 @@ int check_file(char c){
 	return 0;
 }
 
-int count_pipes(char *src, int del){
-	int cnt = 0;
+int count_dels(char *src, int del){
+	int cnt = 1;
 	for(int i=0; i<strlen(src); i++){
 		if(src[i] == del) cnt++;
 	}
@@ -140,25 +140,10 @@ cmdrec init_cmdrec(cmdrec cmd){
 	return cmd;
 }
 
-cmdrec analyze_buf(cmdrec cmdar, char *cmd, int *m_in, int *m_out){
-	printf("# analyze_odr()\n");
+cmdrec analyze_buf(cmdrec cmdar, char *cmd){
+	printf("# analyze_buf()\n");
 	int cmdlen = strlen(cmd);
-	// printf("%s\n", cmd);
 	cmdar.ifn = (char *)malloc(sizeof(char)*cmdlen);
-	*m_in = pickrdirIn(cmdar.ifn, cmd);
-	printf("# cmdar.ifn = \"%s\", cmd = \"%s\"\n",cmdar.ifn, cmd);
-	if(cmdar.ifn && cmdar.ifn[0]){
-		cmdar.ifd = open(cmdar.ifn, O_WRONLY|O_CREAT|O_TRUNC, 0644);
- 	}
-	printf("# cmdar.ifd = %d\n",cmdar.ifd);
-	
-	cmdar.ofn = (char *)malloc(sizeof(char)*cmdlen);
-	*m_out = pickrdirOut(cmdar.ofn, cmd);
-	printf("# cmdar.ofn = \"%s\", cmd = \"%s\"\n",cmdar.ofn, cmd);
-	if(cmdar.ofn && cmdar.ofn[0]){
-		cmdar.ofd = open(cmdar.ofn, O_WRONLY|O_CREAT|O_TRUNC, 0644);
-	}
-	printf("# cmdar.ofd = %d\n",cmdar.ofd);
 	return cmdar;
 }
 
@@ -180,8 +165,9 @@ int changedir(char *bb){
 int main(){
 	pid_t pid;
 	int status;
-	char buf[BUFSIZ];
-	char *inp;
+	char buf[BUFSIZ];	// fgets
+	char *inp;			// modified buf
+	char **ods;			// ods means orders
 
 	while(true){
 		printf("$ ");
@@ -190,57 +176,41 @@ int main(){
 		buf[buflen-1] = '\0';
 		
 		// skip spaces head of buf
-		int sflag = 0;
 		for(int i=0; i<buflen; i++){
-			if(buf[i]!= ' '){
+			if(buf[i] != ' '){
 				inp = buf+i;
 				break;
 			}
 		}
-		printf("# inp = %s, buflen = %d\n",inp,buflen);
-		cmdrec cmdar;
-		cmdar = init_cmdrec(cmdar);
-		int m_in = 0, m_out = 0;
-		cmdar = analyze_buf(cmdar, inp, &m_in, &m_out);
-		printf("# m_in, m_out = %d, %d\n",m_in, m_out);
-		int chflag = 0;
-		if(buflen > 1){
-			if( inp[0] == 'c' && inp[1] == 'd' && inp[2] == ' '){
-				chflag = 1;
-				changedir(inp);
-			}
+		int n_proc = count_dels(inp, '|');
+		char **ods = (char **)malloc(sizeof(char *)*n_proc);
+		for(int i=0; i<n_proc; i++){
+			ods[i] = (char *)malloc(sizeof(char)*BUFSIZ);
 		}
-
-		if(!chflag){
-			pid = fork();
-			cmdar.pid = pid;
-			if(cmdar.pid == 0 ){
-				char **tmp = (char **)malloc(sizeof(char *)*11);
-				for(int i=0; i<10; i++){
-					*(tmp+i) = (char *)malloc(sizeof(char)*BUFSIZ);
-				}
-				tmp[10] = 0;
-				split(10, BUFSIZ, tmp, inp, ' ');
-				show(tmp);
-				for(int k=0; k<10; k++){
-					if(!*(tmp+k)){
-						break;
-					}
-					cmdar.cmdarg[k] = *(tmp+k);
-					// cmdarg[] should not have '\0', just replace NULL
-					if(cmdar.cmdarg[k][0] == '\0') cmdar.cmdarg[k] = NULL;
-				}
-				show_cmdrec(cmdar);
-				DUP2(cmdar.ifd, 0);
-				DUP2(cmdar.ofd, 1);
-				// execlp(buf, buf, (char *)NULL);
-				execvp(cmdar.cmdarg[0], cmdar.cmdarg);
-				perror("execvp");
-				exit(1);
+		split(n_proc, BUFSIZ, ods, inp, '|');
+		show(ods);
+		// printf("# inp = %s, buflen = %d\n",inp,buflen);
+		cmdrec cmdar[n_proc];
+		
+		for(int k=0; k<n_proc; k++){
+			cmdar[k] = init_cmdrec(cmdar[k]);
+			cmdar[k] = analyze_buf(cmdar[k], ods[k]);
+			
+			char **tmp = (char **)malloc(sizeof(char *)*11);
+			for(int i=0; i<10; i++){
+				*(tmp+i) = (char *)malloc(sizeof(char)*BUFSIZ);
 			}
-			while(wait(&status) != pid){
-				;
+			split(10, BUFSIZ, tmp, ods[k], ' ');
+			for(int i=0; i<10; i++){
+				if(!*(tmp+i)){
+					break;
+				}
+				cmdar[k].cmdarg[i] = *(tmp+i);
+				if(cmdar[k].cmdarg[i][0] == '\0'){
+					cmdar[k].cmdarg[i] = NULL;
+				}
 			}
 		}
 	}
+	return 0;
 }
