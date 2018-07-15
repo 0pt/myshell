@@ -67,6 +67,14 @@ int check_file(char c){
 	return 0;
 }
 
+int count_pipes(char *src, int del){
+	int cnt = 0;
+	for(int i=0; i<strlen(src); i++){
+		if(src[i] == del) cnt++;
+	}
+	return cnt;
+}
+
 // slide hint03 p.7 ; pick redirect area
 int pickrdirIn(char *dst, char *src){
 	printf("# pickrdirIN()\n");
@@ -154,46 +162,85 @@ cmdrec analyze_buf(cmdrec cmdar, char *cmd, int *m_in, int *m_out){
 	return cmdar;
 }
 
+int changedir(char *bb){
+	char **tmp = (char **)malloc(sizeof(char *)*11);
+	for(int i=0; i<10; i++){
+		*(tmp+i) = (char *)malloc(sizeof(char)*BUFSIZ);
+	}
+	tmp[10] = 0;
+	split(10, BUFSIZ, tmp, bb, ' ');
+	if(chdir(tmp[1]) < 0){
+		perror("chdir");
+		return -1;
+	}
+	free(tmp);
+	return 0;
+}
+
 int main(){
 	pid_t pid;
 	int status;
 	char buf[BUFSIZ];
+	char *inp;
+
 	while(true){
 		printf("$ ");
 		if(fgets(buf, sizeof(buf), stdin) == NULL) break;
-		buf[strlen(buf)-1] = '\0';
+		int buflen = strlen(buf);
+		buf[buflen-1] = '\0';
+		
+		// skip spaces head of buf
+		int sflag = 0;
+		for(int i=0; i<buflen; i++){
+			if(buf[i]!= ' '){
+				inp = buf+i;
+				break;
+			}
+		}
+		printf("# inp = %s, buflen = %d\n",inp,buflen);
 		cmdrec cmdar;
 		cmdar = init_cmdrec(cmdar);
 		int m_in = 0, m_out = 0;
-		cmdar = analyze_buf(cmdar, buf, &m_in, &m_out);
+		cmdar = analyze_buf(cmdar, inp, &m_in, &m_out);
 		printf("# m_in, m_out = %d, %d\n",m_in, m_out);
-		pid = fork();
-		cmdar.pid = pid;
-		// pid == 0 is child proc
-		if(cmdar.pid == 0){
-			char **tmp = (char **)malloc(sizeof(char)*11);
-			for(int i=0; i<10; i++){
-				*(tmp+i) = (char *)malloc(sizeof(char)*BUFSIZ);
+		int chflag = 0;
+		if(buflen > 1){
+			if( inp[0] == 'c' && inp[1] == 'd' && inp[2] == ' '){
+				chflag = 1;
+				changedir(inp);
 			}
-			split(10, BUFSIZ, tmp, buf, ' ');
-			show(tmp);
-			for(int k=0; k<10; k++){
-				if(!*(tmp+k)){
-					break;
-				}
-				cmdar.cmdarg[k] = *(tmp+k);
-				
-				// because my split() cause bag, it just replace NULL
-				if(cmdar.cmdarg[k][0] == '\0') cmdar.cmdarg[k] = NULL;
-			}
-			show_cmdrec(cmdar);
-			// execlp(buf, buf, (char *)NULL);
-			execvp(cmdar.cmdarg[0], cmdar.cmdarg);
-			perror("execvp");
-			exit(1);
 		}
-		while(wait(&status) != pid){
-			;
+
+		if(!chflag){
+			pid = fork();
+			cmdar.pid = pid;
+			if(cmdar.pid == 0 ){
+				char **tmp = (char **)malloc(sizeof(char *)*11);
+				for(int i=0; i<10; i++){
+					*(tmp+i) = (char *)malloc(sizeof(char)*BUFSIZ);
+				}
+				tmp[10] = 0;
+				split(10, BUFSIZ, tmp, inp, ' ');
+				show(tmp);
+				for(int k=0; k<10; k++){
+					if(!*(tmp+k)){
+						break;
+					}
+					cmdar.cmdarg[k] = *(tmp+k);
+					// cmdarg[] should not have '\0', just replace NULL
+					if(cmdar.cmdarg[k][0] == '\0') cmdar.cmdarg[k] = NULL;
+				}
+				show_cmdrec(cmdar);
+				DUP2(cmdar.ifd, 0);
+				DUP2(cmdar.ofd, 1);
+				// execlp(buf, buf, (char *)NULL);
+				execvp(cmdar.cmdarg[0], cmdar.cmdarg);
+				perror("execvp");
+				exit(1);
+			}
+			while(wait(&status) != pid){
+				;
+			}
 		}
 	}
 }
