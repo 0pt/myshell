@@ -140,10 +140,34 @@ cmdrec init_cmdrec(cmdrec cmd){
 	return cmd;
 }
 
+// pick redirect, and set ifd & ofd
 cmdrec analyze_buf(cmdrec cmdar, char *cmd){
 	printf("# analyze_buf()\n");
+	int m_in = 0, m_out = 0;
 	int cmdlen = strlen(cmd);
+	
 	cmdar.ifn = (char *)malloc(sizeof(char)*cmdlen);
+	m_in = pickrdirIn(cmdar.ifn, cmd);
+	printf("# cmdar.ifn = \"%s\", cmd = \"%s\"\n",cmdar.ifn, cmd);
+	if(cmdar.ifn && cmdar.ifn[0]){
+		cmdar.ifd = open(cmdar.ifn, O_RDONLY);
+		if(cmdar.ifd < 0){
+			perror("open");
+		}
+	}
+	printf("# cmdar.ifd = %d\n",cmdar.ifd);
+	
+	cmdar.ofn = (char *)malloc(sizeof(char)*cmdlen);
+	m_out = pickrdirOut(cmdar.ofn, cmd);
+	printf("# cmdar.ofn = \"%s\" cmd = \"%s\"\n",cmdar.ofn, cmd);
+	if(cmdar.ofn && cmdar.ofn[0]){
+		cmdar.ofd = open(cmdar.ofn, O_WRONLY|O_CREAT|O_TRUNC, 0644);
+		if(cmdar.ofd < 0){
+			perror("open");
+		}
+	}
+	printf("# cmdar.ofd = %d\n",cmdar.ofd);
+	
 	return cmdar;
 }
 
@@ -184,22 +208,25 @@ int main(){
 		}
 		int n_proc = count_dels(inp, '|');
 		char **ods = (char **)malloc(sizeof(char *)*n_proc);
+
 		for(int i=0; i<n_proc; i++){
 			ods[i] = (char *)malloc(sizeof(char)*BUFSIZ);
 		}
 		split(n_proc, BUFSIZ, ods, inp, '|');
-		show(ods);
-		// printf("# inp = %s, buflen = %d\n",inp,buflen);
+		for(int i=0; i<n_proc; i++){
+			while(*(ods[i]) == ' ') ods[i]++;
+		}
+		// show(ods);
 		cmdrec cmdar[n_proc];
 		
 		for(int k=0; k<n_proc; k++){
 			cmdar[k] = init_cmdrec(cmdar[k]);
 			cmdar[k] = analyze_buf(cmdar[k], ods[k]);
-			
 			char **tmp = (char **)malloc(sizeof(char *)*11);
 			for(int i=0; i<10; i++){
 				*(tmp+i) = (char *)malloc(sizeof(char)*BUFSIZ);
 			}
+			tmp[10] = 0;
 			split(10, BUFSIZ, tmp, ods[k], ' ');
 			for(int i=0; i<10; i++){
 				if(!*(tmp+i)){
@@ -210,6 +237,10 @@ int main(){
 					cmdar[k].cmdarg[i] = NULL;
 				}
 			}
+			for(int i=0; i<10; i++){
+				free(*(tmp+i));
+			}
+			free(tmp);
 		}
 	}
 	return 0;
