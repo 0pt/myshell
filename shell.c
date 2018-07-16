@@ -7,6 +7,7 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 #include "split.h"
+#include <time.h>
 
 #define RDIR_IN		(10)
 #define RDIR_HERE	(11)
@@ -43,8 +44,10 @@ void show_cmdrec(cmdrec cmdar){
 	printf("# pid = %d, ifd = %d, ofd = %d\n",cmdar.pid,cmdar.ifd,cmdar.ofd);
 	printf("# ifn = %s\n# ofn = %s\n",cmdar.ifn,cmdar.ofn);
 	for(int i=0; i<10; i++){
+		if(i>1) cmdar.cmdarg[i] = NULL;
 		printf("# %d : %s\n",i ,cmdar.cmdarg[i]);
 	}
+	printf("# end of cmdrec()\n");
 }
 
 void init_dar(char **dar, int n){
@@ -61,7 +64,7 @@ int check_file(char c){
 		return 1;
 	}else if(c >= '0' && c<= '9'){
 		return 1;
-	}else if(c == '.' || c == '-'){
+	}else if(c == '.' || c == '-' || c == '_'){
 		return 1;
 	}
 	return 0;
@@ -150,7 +153,7 @@ cmdrec analyze_buf(cmdrec cmdar, char *cmd){
 	m_in = pickrdirIn(cmdar.ifn, cmd);
 	printf("# cmdar.ifn = \"%s\", cmd = \"%s\"\n",cmdar.ifn, cmd);
 	if(cmdar.ifn && cmdar.ifn[0]){
-		cmdar.ifd = open(cmdar.ifn, O_RDONLY);
+		cmdar.ifd = open(cmdar.ifn, O_RDONLY|O_CREAT|O_TRUNC, 0644);
 		if(cmdar.ifd < 0){
 			perror("open");
 		}
@@ -182,8 +185,39 @@ int changedir(char *bb){
 		perror("chdir");
 		return -1;
 	}
+	for(int i=0; i<10; i++){
+		free(tmp[i]);
+	}
 	free(tmp);
 	return 0;
+}
+
+cmdrec devide_od(char *od, cmdrec cmdar){
+	printf("# devide_od()\n");
+	char **tmp = (char **)malloc(sizeof(char *)*11);
+	for(int i=0; i<10; i++){
+		*(tmp+i) = (char *)malloc(sizeof(char)*BUFSIZ);
+	}
+	tmp[10] = 0;
+	split(10, BUFSIZ, tmp, od, ' ');
+	// show(tmp);
+	for(int i=0; i<10; i++){
+		if(!*(tmp+i)){
+			cmdar.cmdarg[i] = 0;
+			break;
+		}
+		cmdar.cmdarg[i] = *(tmp+i);
+		if(cmdar.cmdarg[i][0] == '\0'){
+			cmdar.cmdarg[i] = NULL;
+		}
+	}
+	show_cmdrec(cmdar);
+	return cmdar;
+	DUP2(cmdar.ifd, 0);
+	DUP2(cmdar.ofd, 1);
+	execvp(cmdar.cmdarg[0], cmdar.cmdarg);
+	perror("execvp");
+	exit(1);
 }
 
 int main(){
@@ -192,8 +226,11 @@ int main(){
 	char buf[BUFSIZ];	// fgets
 	char *inp;			// modified buf
 	char **ods;			// ods means orders
-
+	struct timespec ts;
+	ts.tv_sec = 0;
+	ts.tv_nsec = 5000000;
 	while(true){
+		nanosleep(&ts, NULL);
 		printf("$ ");
 		if(fgets(buf, sizeof(buf), stdin) == NULL) break;
 		int buflen = strlen(buf);
@@ -207,7 +244,7 @@ int main(){
 			}
 		}
 		int n_proc = count_dels(inp, '|');
-		char **ods = (char **)malloc(sizeof(char *)*n_proc);
+		char **ods = (char **)malloc(sizeof(char *)*(n_proc+1));
 
 		for(int i=0; i<n_proc; i++){
 			ods[i] = (char *)malloc(sizeof(char)*BUFSIZ);
@@ -218,29 +255,80 @@ int main(){
 		}
 		// show(ods);
 		cmdrec cmdar[n_proc];
-		
-		for(int k=0; k<n_proc; k++){
-			cmdar[k] = init_cmdrec(cmdar[k]);
-			cmdar[k] = analyze_buf(cmdar[k], ods[k]);
-			char **tmp = (char **)malloc(sizeof(char *)*11);
-			for(int i=0; i<10; i++){
-				*(tmp+i) = (char *)malloc(sizeof(char)*BUFSIZ);
+		for(int i=n_proc-1; i>=0; i--){
+			cmdar[i] = init_cmdrec(cmdar[i]);
+			// cmdar[i].ifd = -1;
+			// cmdar[i].ofd = -1;
+			cmdar[i] = analyze_buf(cmdar[i], ods[i]);
+		}
+
+		int chflag = 0;
+		show(ods);
+		if(ods[0][0]=='c' && ods[0][1]=='d' && ods[0][2]==' '){
+			changedir(ods[0]);
+			chflag = 1;
+		}
+		if(!chflag){
+			int ik;
+			int npro = n_proc-2;
+			if(n_proc == 1) npro = 0;
+			int pi[npro][2];
+			for(int k=0; k<n_proc-1; k++){
+				pi[k][0] = -1;
+				pi[k][1] = -1;
 			}
-			tmp[10] = 0;
-			split(10, BUFSIZ, tmp, ods[k], ' ');
-			for(int i=0; i<10; i++){
-				if(!*(tmp+i)){
-					break;
+			for(int k=n_proc-1; k>=0; k--){
+				if(k > 0){
+					ik = pipe(pi[k-1]);
+					printf("# k=%d pi[%d]=[%d %d]\n",k,k-1,pi[k-1][0],pi[k-1][1]);
 				}
-				cmdar[k].cmdarg[i] = *(tmp+i);
-				if(cmdar[k].cmdarg[i][0] == '\0'){
-					cmdar[k].cmdarg[i] = NULL;
+				pid = fork();
+				cmdar[k].pid = pid;
+				if(cmdar[k].pid == 0){
+					cmdar[k] = devide_od(ods[k], cmdar[k]);
+					// cmdar[k].cmdarg[2] = 0;
+					if(k == n_proc-1 && n_proc > 1){
+						DUP2(pi[k-1][0], 0);
+						printf("# waiting grep at %d\n",pi[k-1][0]);
+						// here, (k-1) == (n_proc-2)
+						CLOSE(pi[n_proc-2][0]);
+						CLOSE(pi[n_proc-2][1]);
+					}else if(k > 0){
+						printf("# case 2 at k = %d\n",k);
+						DUP2(pi[k][1], 1);
+						DUP2(pi[k-1][0], 0);
+						int pipenum = n_proc - k;
+						for(int i=0; i<pipenum; i++){
+							CLOSE(pi[n_proc-2-i][0]);
+							CLOSE(pi[n_proc-2-i][1]);
+						}
+						CLOSE(pi[k][0]);
+						CLOSE(pi[k][1]);
+						CLOSE(pi[k-1][0]);
+						CLOSE(pi[k-1][0]);
+					}else if(k == 0){
+						printf("# case 1 at k = %d\n",k);
+						DUP2(pi[k][1], 1);
+						printf("# sending %d from ls\n",pi[k][1]);
+						for(int i=0; i<n_proc-1; i++){
+							CLOSE(pi[i][0]);
+							CLOSE(pi[i][1]);
+						}
+					}
+					DUP2(cmdar[k].ifd, 0);
+					DUP2(cmdar[k].ofd, 1);
+					execvp(cmdar[k].cmdarg[0], cmdar[k].cmdarg);
+					perror("execvp");
+					exit(1);
 				}
 			}
-			for(int i=0; i<10; i++){
-				free(*(tmp+i));
+			while(wait(&status) != pid){
+				;
 			}
-			free(tmp);
+			for(int k=0; k<n_proc-1; k++){
+				CLOSE(pi[k][0]);
+				CLOSE(pi[k][1]);
+			}
 		}
 	}
 	return 0;
