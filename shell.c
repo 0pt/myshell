@@ -84,7 +84,6 @@ int count_dels(char *src, int del){
 int pickrdirIn(char *dst, char *src){
 	// printf("# pickrdirIN()\n");
 	int m=0; char *p = src, *q = dst, *c;
-	// printf("%c\n",*p);
 	while(*p){
 		if(*p == '<'){
 			c = p;
@@ -147,31 +146,26 @@ cmdrec init_cmdrec(cmdrec cmd){
 
 // pick redirect, and set ifd & ofd
 cmdrec analyze_buf(cmdrec cmdar, char *cmd){
-	// printf("# analyze_buf()\n");
 	int m_in = 0, m_out = 0;
 	int cmdlen = strlen(cmd);
 	
 	cmdar.ifn = (char *)malloc(sizeof(char)*cmdlen);
 	m_in = pickrdirIn(cmdar.ifn, cmd);
-	// printf("# cmdar.ifn = \"%s\", cmd = \"%s\"\n",cmdar.ifn, cmd);
 	if(cmdar.ifn && cmdar.ifn[0]){
-		cmdar.ifd = open(cmdar.ifn, O_RDONLY|O_CREAT|O_TRUNC, 0644);
+		cmdar.ifd = open(cmdar.ifn, O_RDONLY|O_CREAT, 0644);
 		if(cmdar.ifd < 0){
 			perror("open");
 		}
 	}
-	// printf("# cmdar.ifd = %d\n",cmdar.ifd);
 	
 	cmdar.ofn = (char *)malloc(sizeof(char)*cmdlen);
 	m_out = pickrdirOut(cmdar.ofn, cmd);
-	// printf("# cmdar.ofn = \"%s\" cmd = \"%s\"\n",cmdar.ofn, cmd);
 	if(cmdar.ofn && cmdar.ofn[0]){
 		cmdar.ofd = open(cmdar.ofn, O_WRONLY|O_CREAT|O_TRUNC, 0644);
 		if(cmdar.ofd < 0){
 			perror("open");
 		}
 	}
-	// printf("# cmdar.ofd = %d\n",cmdar.ofd);
 	
 	return cmdar;
 }
@@ -195,7 +189,6 @@ int changedir(char *bb){
 }
 
 cmdrec devide_od(char *od, cmdrec cmdar){
-	// printf("# devide_od()\n");
 	char **tmp = (char **)malloc(sizeof(char *)*11);
 	for(int i=0; i<10; i++){
 		*(tmp+i) = (char *)malloc(sizeof(char)*BUFSIZ);
@@ -213,13 +206,7 @@ cmdrec devide_od(char *od, cmdrec cmdar){
 			cmdar.cmdarg[i] = NULL;
 		}
 	}
-	// show_cmdrec(cmdar);
 	return cmdar;
-	DUP2(cmdar.ifd, 0);
-	DUP2(cmdar.ofd, 1);
-	execvp(cmdar.cmdarg[0], cmdar.cmdarg);
-	perror("execvp");
-	exit(1);
 }
 
 int stcopy(char *src, char *dst){
@@ -259,9 +246,7 @@ int addhist(char **his, char *src, int c){
 		c = 0;
 	}
 	his[c] = src;
-	// printf("#inp \"%s\" hist[%d]=\"%s\"\n",src,c,his[c]);
 	c++;
-	// his[c] = 0;
 	return c;
 }
 
@@ -295,12 +280,9 @@ int main(){
 
 		// history
 		if(skiphead(buf)[0] != '!'){
-			// hscnt = addhist(hist, buf, hscnt);
 			stcopy(buf, hist[hscnt]);
-			// printf("#buf \"%s\" hist[%d]=\"%s\"\n",buf,hscnt,hist[hscnt]);
 			hscnt++;
 			if(hscnt == MAX_HIST) hscnt = 0;
-			// hist[hscnt] = 0;
 		}
 
 		// skip spaces head of buf
@@ -315,33 +297,22 @@ REP:
 		split(n_proc, BUFSIZ, ods, inp, '|');
 		for(int i=0; i<n_proc; i++){
 			ods[i] = skiphead(ods[i]);
-			// while(*(ods[i]) == ' ') ods[i]++;
 		}
-		// show(ods);
 		cmdrec cmdar[n_proc];
 		for(int i=n_proc-1; i>=0; i--){
 			cmdar[i] = init_cmdrec(cmdar[i]);
-			// cmdar[i].ifd = -1;
-			// cmdar[i].ofd = -1;
 			cmdar[i] = analyze_buf(cmdar[i], ods[i]);
 		}
 
 		chflag = 1;
-		// show(ods);
 		if(ods[0][0]=='c' && ods[0][1]=='d' && ods[0][2]==' '){
 			changedir(ods[0]);
 		}else if(stcomp(ods[0], "history")){
-			// printf("# hist\n");
 			show_hist(hist, hscnt);
 		}else if(stcomp(ods[0], "!!") && hscnt > 0){
 			inp = hist[hscnt-1];
 			hscnt = addhist(hist, inp, hscnt);
-			// hist[hscnt] = inp;
-			// hscnt++;
 			inp = skiphead(inp);
-			// free(hist[hscnt]);
-			// hscnt--;
-			// printf("# hscnt = %d\n",hscnt);
 			goto REP;
 		}else if(ods[0][0] == '!'){
 			int tmp = 0;
@@ -351,12 +322,9 @@ REP:
 				tmp = tmp*10 + (ods[0][ii]-'0');
 				ii++;
 			}
-			// printf("# histnum = %d\n",tmp);
 			if(tmp < hscnt && tmp >= 0){
 				inp = hist[tmp];
 				hscnt = addhist(hist, inp, hscnt);
-				// hist[hscnt] = inp;
-				// hscnt++;
 				inp = skiphead(inp);
 				goto REP;
 			}
@@ -375,21 +343,17 @@ REP:
 			for(int k=n_proc-1; k>=0; k--){
 				if(k > 0){
 					ik = pipe(pi[k-1]);
-					// printf("# k=%d pi[%d]=[%d %d]\n",k,k-1,pi[k-1][0],pi[k-1][1]);
 				}
 				pid = fork();
 				cmdar[k].pid = pid;
 				if(cmdar[k].pid == 0){
 					cmdar[k] = devide_od(ods[k], cmdar[k]);
-					// cmdar[k].cmdarg[2] = 0;
 					if(k == n_proc-1 && n_proc > 1){
 						DUP2(pi[k-1][0], 0);
-						// printf("# waiting grep at %d\n",pi[k-1][0]);
-						// here, (k-1) == (n_proc-2)
+						// at here, (k-1) == (n_proc-2)
 						CLOSE(pi[n_proc-2][0]);
 						CLOSE(pi[n_proc-2][1]);
 					}else if(k > 0){
-						// printf("# case 2 at k = %d\n",k);
 						DUP2(pi[k][1], 1);
 						DUP2(pi[k-1][0], 0);
 						int pipenum = n_proc - k;
@@ -402,16 +366,17 @@ REP:
 						CLOSE(pi[k-1][0]);
 						CLOSE(pi[k-1][0]);
 					}else if(k == 0){
-						// printf("# case 1 at k = %d\n",k);
 						DUP2(pi[k][1], 1);
-						// printf("# sending %d from ls\n",pi[k][1]);
 						for(int i=0; i<n_proc-1; i++){
 							CLOSE(pi[i][0]);
 							CLOSE(pi[i][1]);
 						}
 					}
+					if(cmdar[k].ifd != -1) printf("# duped in %d\n",cmdar[k].ifd);
 					DUP2(cmdar[k].ifd, 0);
 					DUP2(cmdar[k].ofd, 1);
+					CLOSE(cmdar[k].ifd);
+					CLOSE(cmdar[k].ofd);
 					execvp(cmdar[k].cmdarg[0], cmdar[k].cmdarg);
 					perror("execvp");
 					exit(1);
@@ -428,7 +393,6 @@ REP:
 			// while(wait(&status) != pid){
 			// 	;
 			// }
-			// sleep(1);
 		}
 		
 	}
