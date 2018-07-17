@@ -14,7 +14,8 @@
 
 void show(char **dar){
 	for(int i=0; dar[i]!=0; i++){
-		printf("%s\n",dar[i]);
+		// printf("# %s \t%d\n",dar[i],*(*(dar+i)));
+		printf("%d : %s\n",i,dar[i]);
 	}
 }
 
