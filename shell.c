@@ -63,7 +63,7 @@ int check_file(char c){
 	return 0;
 }
 
-// slide hint03 p.7 ; pick redirect area
+// pick redirect area
 int pickrdirIN(char *dst, char *src){
 	printf("# pickrdirIN()\n");
 	int m=0; char *p = src, *q = dst, *c;
@@ -131,7 +131,6 @@ cmdrec init_cmdrec(cmdrec cmd){
 cmdrec analyze_buf(cmdrec cmdar, char *cmd){
 	printf("# analyze_odr()\n");
 	int cmdlen = strlen(cmd);
-	// printf("%s\n", cmd);
 
 	cmdar.ifn = (char *)malloc(sizeof(char)*cmdlen);
 	int m_in = pickrdirIN(cmdar.ifn, cmd);
@@ -164,7 +163,7 @@ int main(){
 		analyze_buf(cmdar, buf);
 		pid = fork();
 		
-		// pid == 0 is child proc
+		// in child proc
 		if(pid == 0){
 			execlp(buf, buf, (char *)NULL);
 			perror("execlp");
